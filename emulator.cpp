@@ -15,9 +15,159 @@
 #define MAX_SRC_LEN (1024*1024)
 
 typedef struct {
-	char* src;
-	int offset;
+  char* src;
+  int offset;
 } source;
+
+typedef enum {
+  UNIMPL = 0,
+  ADD,
+  ADDI,
+  AND,
+  ANDI,
+  AUIPC,
+  BEQ,
+  BGE,
+  BGEU,
+  BLT,
+  BLTU,
+  BNE,
+  JAL,
+  JALR,
+  LB,
+  LBU,
+  LH,
+  LHU,
+  LUI,
+  LW,
+  OR,
+  ORI,
+  SB,
+  SH,
+  SLL,
+  SLLI,
+  SLT,
+  SLTI,
+  SLTIU,
+  SLTU,
+  SRA,
+  SRAI,
+  SRL,
+  SRLI,
+  SUB,
+  SW,
+  XOR,
+  XORI,
+  HCF
+} instr_type;
+
+typedef enum {
+  R = 0,
+  I,
+  S,
+  B,
+  U,
+  J,
+  SHIFT,
+  UN,
+} RISBUJ;
+
+typedef enum {
+  OPTYPE_NONE, // more like "don't care"
+  OPTYPE_REG,
+  OPTYPE_IMM,
+  OPTYPE_LABEL,
+} operand_type;
+
+typedef struct {
+  operand_type type = OPTYPE_NONE;
+  char label[MAX_LABEL_LEN];
+  int reg;
+  int imm;
+
+} operand;
+
+typedef struct {
+  instr_type op;
+  operand a1;
+  operand a2;
+  operand a3;
+  char* psrc = NULL;
+  int orig_line=-1;
+  bool breakpoint = false;
+} instr;
+
+typedef struct {
+  char label[MAX_LABEL_LEN];
+  int loc = -1;
+} label_loc;
+
+
+
+
+
+typedef struct {
+    instr_type op;
+    uint32_t funct7;
+    uint32_t funct3;
+    uint32_t opcode;
+} instr_to_code;
+
+// R(funct7, rs2, rs1, funct3, rd, opcode)
+// I(imm[11,0], rs1, fuct3, rd, opcode)
+// S(imm[11,5], rs2, rs1, funct3, imm[4,0], opcode)
+// B(imm[12], imm[10,5], rs2, rs1, funct3, imm[4,1], imm[11], opcode)
+// U(imm[31,12], rd, opcode)
+// J(imm[20], imm[10,1], imm[11], imm[19,12], rd, opcode)
+// funct7, funct3, opcode
+
+instr_to_code instr_to_codes[] = {
+    { UNIMPL, 0, 0, 0 },
+    { ADD, 0b0000000, 0b000, 0b0110011 },
+    { ADDI, 0, 0b000, 0b0010011 },
+    { AND, 0b0000000, 0b111, 0b0110011 },
+    { ANDI, 0, 0b111, 0b0010011 },
+    { AUIPC, 0, 0, 0b0010111 },
+    { BEQ, 0, 0b000, 0b1100011 },
+    { BGE, 0, 0b101, 0b1100011 },
+    { BGEU, 0, 0b111, 0b1100011 },
+    { BLT, 0, 0b100, 0b1100011 },
+    { BLTU, 0, 0b110, 0b1100011 },
+    { BNE, 0, 0b001, 0b1100011 },
+    { JAL, 0, 0, 0b1101111 },
+    { JALR, 0, 0b000, 0b1100111 },
+    { LB, 0, 0b000, 0b0000011 },
+    { LBU, 0, 0b100, 0b0000011 },
+    { LH, 0, 0b001, 0b0000011 },
+    { LHU, 0, 0b101, 0b0000011 },
+    { LUI, 0, 0, 0b0110111 },
+    { LW, 0, 0b010, 0b0000011 },
+    { OR, 0b0000000, 0b110, 0b0110011 },
+    { ORI, 0, 0b110, 0b0010011 },
+    { SB, 0, 0b000, 0b0100011 },
+    { SH, 0, 0b001, 0b0100011 },
+    { SLL, 0b0000000, 0b001, 0b0110011 },
+    { SLLI, 0b0000000, 0b001, 0b0010011 },
+    { SLT, 0b0000000, 0b010, 0b0110011 },
+    { SLTI, 0, 0b010, 0b0010011 },
+    { SLTIU, 0, 0b011, 0b0010011 },
+    { SLTU, 0b0000000, 0b011, 0b0110011 },
+    { SRA, 0b0100000, 0b101, 0b0110011 },
+    { SRAI, 0b0100000, 0b101, 0b0010011 },
+    { SRL, 0b0000000, 0b101, 0b0110011 },
+    { SRLI, 0b0000000, 0b101, 0b0010011 },
+    { SUB, 0b0100000, 0b000, 0b0110011 },
+    { SW, 0, 0b010, 0b0100011 },
+    { XOR, 0b0000000, 0b100, 0b0110011 },
+    { XORI, 0, 0b100, 0b0010011 },
+    { HCF, 0, 0, 0 }
+};
+
+
+
+
+
+
 
 bool streq(char* s, const char* q) {
 	if ( strcmp(s,q) == 0 ) return true;
@@ -41,49 +191,6 @@ void print_regfile(uint32_t rf[32]) {
 		if ( (i+1) % 8 == 0 ) printf( "\n" );
 	}
 }
-
-
-typedef enum {
-	UNIMPL = 0,
-	ADD,
-	ADDI,
-	AND,
-	ANDI,
-	AUIPC,
-	BEQ,
-	BGE,
-	BGEU,
-	BLT,
-	BLTU,
-	BNE,
-	JAL,
-	JALR,
-	LB,
-	LBU,
-	LH,
-	LHU,
-	LUI,
-	LW,
-	OR,
-	ORI,
-	SB,
-	SH,
-	SLL,
-	SLLI,
-	SLT,
-	SLTI,
-	SLTIU,
-	SLTU,
-	SRA,
-	SRAI,
-	SRL,
-	SRLI,
-	SUB,
-	SW,
-	XOR,
-	XORI,
-	HCF
-} instr_type;
 
 instr_type parse_instr(char* tok) {
 	// 2r->1r
@@ -188,7 +295,7 @@ int parse_reg(char* tok, int line, bool strict = true) {
 }
 
 uint32_t parse_imm(char* tok, int bits, int line, bool strict = true) {
-	if ( !(tok[0]>='0'&&tok[0]<='9') && tok[0] != '-' && strict) {
+	if ( !(tok[0]>='0' && tok[0]<='9') && tok[0] != '-' && strict) {
 		print_syntax_error(line, "Malformed immediate value" );
 	}
 	long int imml = strtol(tok, NULL, 0);
@@ -198,13 +305,13 @@ uint32_t parse_imm(char* tok, int bits, int line, bool strict = true) {
 		printf( "Syntax error at token %s\n", tok);
 		exit(1);
 	}
-	uint64_t uv = *(uint64_t*)&imml;
-	uint32_t hv = (uv&UINT32_MAX);
+	uint64_t uv = *(uint64_t*) & imml;
+	uint32_t hv = (uv & UINT32_MAX);
 
 	return hv;
 }
 
-void parse_mem(char* tok, int* reg, uint32_t* imm, int bits, int line) {
+void parse_mem(char* tok, int* reg, int* imm, int bits, int line) {
 	char* imms = strtok(tok, "(");
 	char* regs = strtok(NULL, ")");
 	*imm = parse_imm(imms, bits, line);
@@ -270,29 +377,6 @@ uint32_t mem_read(uint8_t* mem, uint32_t addr, instr_type op) {
 	return ret;
 }
 
-typedef enum {
-	OPTYPE_NONE, // more like "don't care"
-	OPTYPE_REG,
-	OPTYPE_IMM,
-	OPTYPE_LABEL,
-} operand_type;
-typedef struct {
-	operand_type type = OPTYPE_NONE;
-	char label[MAX_LABEL_LEN];
-	int reg;
-	uint32_t imm;
-
-} operand;
-typedef struct {
-	instr_type op;
-	operand a1;
-	operand a2;
-	operand a3;
-	char* psrc = NULL;
-	int orig_line=-1;
-	bool breakpoint = false;
-} instr;
-
 void append_source(const char* op, const char* a1, const char* a2, const char* a3, source* src, instr* i) {
 	char tbuf[128]; // not safe... static size... but should be okay since label length enforced
 	if ( op && a1 && !a2 && !a3 ) {
@@ -313,11 +397,6 @@ void append_source(const char* op, const char* a1, const char* a2, const char* a
 	}
 }
 
-
-typedef struct {
-	char label[MAX_LABEL_LEN];
-	int loc = -1;
-} label_loc;
 
 uint32_t label_addr(char* label , label_loc* labels, int label_count, int orig_line) {
 	for ( int i = 0; i < label_count; i++ ) {
@@ -510,8 +589,10 @@ int parse_instr(int line, char* ftok, instr* imem, int memoff, label_loc* labels
 			case JAL:
 				if ( o2 ) { // two operands, reg, label
 					if ( !o1 || !o2 || o3 || o4 ) print_syntax_error( line, "Invalid format" );
-					i->a1.type = OPTYPE_REG; i->a1.reg = parse_reg(o1, line);
-					i->a2.type = OPTYPE_LABEL; strncpy(i->a2.label, o2, MAX_LABEL_LEN);
+					i->a1.type = OPTYPE_REG;
+					i->a1.reg = parse_reg(o1, line);
+					i->a2.type = OPTYPE_LABEL;
+					strncpy(i->a2.label, o2, MAX_LABEL_LEN);
 				} else { // one operand, label
 					if ( !o1 || o2 || o3 || o4 ) print_syntax_error( line, "Invalid format" );
 
@@ -577,10 +658,15 @@ void parse(FILE* fin, uint8_t* mem, instr* imem, int& memoff, label_loc* labels,
 		char* ftok = strtok(rbuf, " \t\r\n");
 		if ( !ftok ) continue;
 
+    // for comment
 		if ( ftok[0] == '#' ) continue;
+
+    // for assembler directive
 		if ( ftok[0] == '.' ) {
 			memoff = parse_assembler_directive(line, ftok, mem, memoff);
-		} else if ( ftok[strlen(ftok)-1] == ':' ) {
+		}
+    // for label
+    else if ( ftok[strlen(ftok)-1] == ':' ) {
 			ftok[strlen(ftok)-1] = 0;
 			if ( strlen(ftok) >= MAX_LABEL_LEN ) {
 				printf( "Exceeded maximum length of label: %s\n", ftok );
@@ -607,6 +693,7 @@ void parse(FILE* fin, uint8_t* mem, instr* imem, int& memoff, label_loc* labels,
 				}
 			}
 		}
+    // for instruction
 		else {
 			int count = parse_instr(line, ftok, imem, memoff, labels, src);
 			for ( int i = 0; i < count; i++ ) *(uint32_t*)&mem[memoff+(i*4)] = 0xcccccccc;
@@ -615,7 +702,243 @@ void parse(FILE* fin, uint8_t* mem, instr* imem, int& memoff, label_loc* labels,
 	}
 }
 
+void normalize_labels(instr* imem, label_loc* labels, int label_count, source* src) {
+	for ( int i = 0; i < DATA_OFFSET/4; i++ ) {
+		instr* ii = &imem[i];
+		if ( ii->op == UNIMPL ) continue;
+
+		if ( ii->a1.type == OPTYPE_LABEL ) {
+			ii->a1.type = OPTYPE_IMM;
+			ii->a1.imm = label_addr(ii->a1.label, labels, label_count, ii->orig_line);
+		}
+		if ( ii->a2.type == OPTYPE_LABEL ) {
+			ii->a2.type = OPTYPE_IMM;
+			ii->a2.imm = label_addr(ii->a2.label, labels, label_count, ii->orig_line);
+			switch (ii->op) {
+				case LUI: {
+					ii->a2.imm = (ii->a2.imm>>12); 
+					char areg[4]; sprintf(areg, "x%02d", ii->a1.reg);
+					char immu[12]; sprintf(immu, "0x%08x" , ii->a2.imm);
+					//printf( "LUI %d 0x%x %s\n", ii->a1.reg, ii->a2.imm, immu );
+					append_source("lui", areg, immu, NULL, src, ii);
+					break;
+				}
+				case JAL:
+					int pc = (i*4);
+					int target = ii->a3.imm;
+					int diff = pc - target;
+					if ( diff < 0 ) diff = -diff;
+
+					if ( diff >= (1<<21) ) {
+						printf( "JAL instruction target out of bounds\n" );
+						exit(3);
+					}
+					break;
+			}
+		}
+		if ( ii->a3.type == OPTYPE_LABEL ) {
+			ii->a3.type = OPTYPE_IMM;
+			ii->a3.imm = label_addr(ii->a3.label, labels, label_count, ii->orig_line);
+			switch(ii->op) {
+				case ADDI: {
+					ii->a3.imm = ii->a3.imm&((1<<12)-1);
+					char a1reg[4]; sprintf(a1reg, "x%02d", ii->a1.reg);
+					char a2reg[4]; sprintf(a2reg, "x%02d", ii->a2.reg);
+					char immd[12]; sprintf(immd, "0x%08x" , ii->a3.imm);
+					//printf( "ADDI %d %d 0x%x %s\n", ii->a1.reg, ii->a2.reg, ii->a3.imm, immd );
+					append_source("addi", a1reg, a2reg, immd, src, ii);
+					break;
+				}
+				case BEQ: case BGE: case BGEU: case BLT: case BLTU: case BNE: {
+					int pc = (i*4);
+					int target = ii->a3.imm;
+					int diff = pc - target;
+					if ( diff < 0 ) diff = -diff;
+
+					if ( diff >= (1<<13) ) {
+						printf( "Branch instruction target out of bounds\n" );
+						exit(3);
+					}
+					break;
+				}
+			}
+		}
+	}
+}
+
+int print_binary(int binary) {
+	int mask = 0;
+
+	for (int i = 31; i >= 0; i--) {
+		mask = 1 << i;
+		printf("%d", binary & mask ? 1 : 0);
+
+		if (i == 7) printf(" ");
+		else if (i == 12) printf(" ");
+		else if (i == 15) printf(" ");
+		else if (i == 20) printf(" ");
+	}
+	printf("\n");
+
+	return 0;
+}
+
+int get_machinecode_by_type(RISBUJ type, instr inst) {
+	int code = 0;
+	int loc_funct7 = 25;
+	int loc_rs2 = 20;
+	int loc_rs1 = 15;
+	int loc_funct3 = 12;
+	int loc_rd = 7;
+	
+	int imm_11_to_0 = 0b11111111111;
+
+	int imm_11_to_5 = 0b111111 << 5;
+	int imm_4_to_0 = 0b11111;
+	
+	int imm_12 = 0b1 << 12;
+	int imm_10_to_5 = 0b1111100000;
+	int imm_4_to_1 = 0b11110;
+	int imm_11 = 0b1 << 11;
+
+	int imm_31_to_12 = 0b11111111111111111111 << 12;
+
+	int imm_20 = 0b1 << 20;
+	int imm_10_to_1 = 0b1111111111 << 1;
+	int imm_19_to_12 = 0b11111111 << 12;
+
+	switch (type) {
+		case R:
+				return
+				instr_to_codes[inst.op].funct7 << loc_funct7 |
+				inst.a3.reg << loc_rs2 |
+				inst.a2.reg << loc_rs1 |
+				instr_to_codes[inst.op].funct3 << loc_funct3 |
+				inst.a1.reg << loc_rd |
+				instr_to_codes[inst.op].opcode;
+		case I:
+			return
+				(inst.a3.imm << loc_rs2) |
+				(inst.a2.reg << loc_rs1) |
+				(instr_to_codes[inst.op].funct3 << loc_funct3) |
+				(inst.a1.reg << loc_rd) |
+				(instr_to_codes[inst.op].opcode);
+		case S:
+			return 
+				(inst.a3.imm & imm_11_to_5) << (loc_funct7 - 5) |
+				inst.a2.reg << loc_rs2 |
+				inst.a1.reg << loc_rs1 |
+				instr_to_codes[inst.op].funct3 << loc_funct3 |
+				(inst.a3.imm & imm_4_to_0) << loc_rd |
+				instr_to_codes[inst.op].opcode;
+		case B:
+			return
+				(inst.a3.imm & imm_12) << (31 - 12) |
+				(inst.a3.imm & imm_10_to_5) << (loc_funct7 - 5) |
+				inst.a2.reg << loc_rs2 |
+				inst.a1.reg << loc_rs1 |
+				instr_to_codes[inst.op].funct3 << loc_funct3 |
+				(inst.a3.imm & imm_4_to_1) << loc_rd + 1 |
+				(inst.a3.imm & imm_11) << loc_rd |
+				instr_to_codes[inst.op].opcode;
+		case U:
+			return
+				(inst.a2.imm & imm_31_to_12) << loc_funct3 |
+				inst.a1.reg << loc_rd |
+				instr_to_codes[inst.op].opcode;
+		case J:
+			return
+				(inst.a2.imm & imm_20) << 31 |
+				(inst.a2.imm & imm_10_to_1) << (loc_rs2 + 1) |
+				(inst.a2.imm & imm_11) << loc_rs2 |
+				(inst.a2.imm & imm_19_to_12) << loc_funct3 | 
+				inst.a1.reg << loc_rd |
+				instr_to_codes[inst.op].opcode;
+		case SHIFT:
+			return
+				instr_to_codes[inst.op].funct7 << loc_funct7 |
+				inst.a3.imm << loc_rs2 |
+				inst.a2.reg << loc_rs1 |
+				instr_to_codes[inst.op].funct3 << loc_funct3 |
+				inst.a1.reg << loc_rd |
+				instr_to_codes[inst.op].opcode;
+		default:
+			return 0;
+	}
+}
+
+int print_machinecode(instr inst) {
+	int code = 0;
+
+	switch (inst.op) {
+		case ADD:
+		case SUB:
+		case SLT:
+		case SLTU:
+		case AND:
+		case OR:
+		case XOR:
+		case SLL:
+		case SRL:
+		case SRA: code = get_machinecode_by_type(R, inst); break;
+
+		case ADDI:
+		case SLTI:
+		case SLTIU:
+		case ANDI:
+		case ORI:
+		case XORI:
+		case JALR:
+		case LB:
+		case LBU: 
+		case LH:
+		case LHU:
+		case LW:
+			code = get_machinecode_by_type(I, inst);
+			if (inst.a3.imm < 0) code |= 0b1 << 31;
+			break;
+
+		case SLLI:
+		case SRLI:
+		case SRAI: code = get_machinecode_by_type(SHIFT, inst); break;
+
+		case SB: 
+		case SH: 
+		case SW:
+			code = get_machinecode_by_type(S, inst);
+			if (inst.a3.imm < 0) code |= 0b1 << 31;
+			break;
+
+		case BEQ:
+		case BGE:
+		case BGEU:
+		case BLT:
+		case BLTU:
+		case BNE:
+			code = get_machinecode_by_type(B, inst);
+			if (inst.a3.imm < 0) code |= 0b1 << 31;
+			break;
+
+		case LUI:
+		case AUIPC:
+			code = get_machinecode_by_type(U, inst);
+			if (inst.a2.imm < 0) code |= 0b1 << 31;
+			break;
+
+		case JAL:
+			code = get_machinecode_by_type(J, inst);
+			if (inst.a2.imm < 0) code |= 0b1 << 31;
+			break;
+
+		case UNIMPL:
+		case HCF: code = get_machinecode_by_type(UN, inst); break;
+	}
+
+	print_binary(code);
+}
+
 void execute(uint8_t* mem, instr* imem, label_loc* labels, int label_count) {
+	// register
 	uint32_t rf[32];
 	uint32_t rf_mirror[32];
 	uint32_t pc = 0;
@@ -632,20 +955,20 @@ void execute(uint8_t* mem, instr* imem, label_loc* labels, int label_count) {
 	bool dexit = false;
 	while(!dexit) {
 		uint32_t iid = pc/4;
-		instr i = imem[iid];
+		instr inst = imem[iid];
 		inst_cnt ++;
 
-		if ( stepping || i.breakpoint ) {
+		if ( stepping || inst.breakpoint ) {
 			if ( stepcnt > 0 ) {
 				stepcnt -= 1;
-			} 
+			}
 
-			if ( stepcnt == 0 || i.breakpoint ) {
+			if ( stepcnt == 0 || inst.breakpoint ) {
 				stepping = true;
 				printf( "\n" );
-				if ( i.psrc ) printf( "Next: %s\n", i.psrc );
+				if ( inst.psrc ) printf( "Next: %s\n", inst.psrc );
 				while (true) {
-					printf( "[inst: %6d pc: %6d, src line %4d] > ", inst_cnt, pc, i.orig_line );
+					printf( "[inst: %6d pc: %6d, src line %4d] > ", inst_cnt, pc, inst.orig_line );
 					fgets(keybuf, 128, stdin);
 					for ( int i = 0; i < strlen(keybuf); i++ ) if (keybuf[i] == '\n') keybuf[i] = '\0';
 					if ( keybuf[0] == 'q' ) {
@@ -724,93 +1047,97 @@ void execute(uint8_t* mem, instr* imem, label_loc* labels, int label_count) {
 				}
 			}
 		}
+
+		//hanjin code
+		print_machinecode(inst);
 		
 		int pc_next = pc + 4;
-		switch (i.op) {
-			case ADD: rf[i.a1.reg] = rf[i.a2.reg] + rf[i.a3.reg]; break;
-			case SUB: rf[i.a1.reg] = rf[i.a2.reg] - rf[i.a3.reg]; break;
-			case SLT: rf[i.a1.reg] = (*(int32_t*)&rf[i.a2.reg]) < (*(int32_t*)&rf[i.a3.reg]) ? 1 : 0; break;
-			case SLTU: rf[i.a1.reg] = rf[i.a2.reg] + rf[i.a3.reg]; break;
-			case AND: rf[i.a1.reg] = rf[i.a2.reg] & rf[i.a3.reg]; break;
-			case OR: rf[i.a1.reg] = rf[i.a2.reg] | rf[i.a3.reg]; break;
-			case XOR: rf[i.a1.reg] = rf[i.a2.reg] ^ rf[i.a3.reg]; break;
-			case SLL: rf[i.a1.reg] = rf[i.a2.reg] << rf[i.a3.reg]; break;
-			case SRL: rf[i.a1.reg] = rf[i.a2.reg] >> rf[i.a3.reg]; break;
-			case SRA: rf[i.a1.reg] = (*(int32_t*)&rf[i.a2.reg]) >> rf[i.a3.reg]; break;
+		switch (inst.op) {
+			case ADD: rf[inst.a1.reg] = rf[inst.a2.reg] + rf[inst.a3.reg]; break;
+			case SUB: rf[inst.a1.reg] = rf[inst.a2.reg] - rf[inst.a3.reg]; break;
+			case SLT: rf[inst.a1.reg] = (*(int32_t*)&rf[inst.a2.reg]) < (*(int32_t*)&rf[inst.a3.reg]) ? 1 : 0; break;
+			case SLTU: rf[inst.a1.reg] = rf[inst.a2.reg] + rf[inst.a3.reg]; break;
+			case AND: rf[inst.a1.reg] = rf[inst.a2.reg] & rf[inst.a3.reg]; break;
+			case OR: rf[inst.a1.reg] = rf[inst.a2.reg] | rf[inst.a3.reg]; break;
+			case XOR: rf[inst.a1.reg] = rf[inst.a2.reg] ^ rf[inst.a3.reg]; break;
+			case SLL: rf[inst.a1.reg] = rf[inst.a2.reg] << rf[inst.a3.reg]; break;
+			case SRL: rf[inst.a1.reg] = rf[inst.a2.reg] >> rf[inst.a3.reg]; break;
+			case SRA: rf[inst.a1.reg] = (*(int32_t*)&rf[inst.a2.reg]) >> rf[inst.a3.reg]; break;
 
 
-			case ADDI: rf[i.a1.reg] = rf[i.a2.reg] + i.a3.imm; break;
-			case SLTI: rf[i.a1.reg] = (*(int32_t*)&rf[i.a2.reg]) < (*(int32_t*)&(i.a3.imm)) ? 1 : 0; break;
-			case SLTIU: rf[i.a1.reg] = rf[i.a2.reg] < i.a3.imm ? 1 : 0; break;
-			case ANDI: rf[i.a1.reg] = rf[i.a2.reg] & i.a3.imm; break;
-			case ORI: rf[i.a1.reg] = rf[i.a2.reg] | i.a3.imm; break;
-			case XORI: rf[i.a1.reg] = rf[i.a2.reg] ^ i.a3.imm; break;
-			case SLLI: rf[i.a1.reg] = rf[i.a2.reg] << i.a3.imm; break;
-			case SRLI: rf[i.a1.reg] = rf[i.a2.reg] >> i.a3.imm; break;
-			case SRAI: rf[i.a1.reg] = (*(int32_t*)&rf[i.a2.reg]) >> i.a3.imm; break;
+			case ADDI: rf[inst.a1.reg] = rf[inst.a2.reg] + inst.a3.imm; break;
+			case SLTI: rf[inst.a1.reg] = (*(int32_t*)&rf[inst.a2.reg]) < (*(int32_t*)&(inst.a3.imm)) ? 1 : 0; break;
+			case SLTIU: rf[inst.a1.reg] = rf[inst.a2.reg] < inst.a3.imm ? 1 : 0; break;
+			case ANDI: rf[inst.a1.reg] = rf[inst.a2.reg] & inst.a3.imm; break;
+			case ORI: rf[inst.a1.reg] = rf[inst.a2.reg] | inst.a3.imm; break;
+			case XORI: rf[inst.a1.reg] = rf[inst.a2.reg] ^ inst.a3.imm; break;
+			case SLLI: rf[inst.a1.reg] = rf[inst.a2.reg] << inst.a3.imm; break;
+			case SRLI: rf[inst.a1.reg] = rf[inst.a2.reg] >> inst.a3.imm; break;
+			case SRAI: rf[inst.a1.reg] = (*(int32_t*)&rf[inst.a2.reg]) >> inst.a3.imm; break;
 
 			case LB:
 			case LBU: 
 			case LH:
 			case LHU:
-			case LW: rf[i.a1.reg] = mem_read(mem, rf[i.a2.reg]+i.a3.imm, i.op); break;
+			case LW: rf[inst.a1.reg] = mem_read(mem, rf[inst.a2.reg]+inst.a3.imm, inst.op); break;
 			
 			case SB: 
 			case SH: 
-			case SW: mem_write(mem, rf[i.a2.reg]+i.a3.imm, rf[i.a1.reg], i.op); break;
+			case SW: mem_write(mem, rf[inst.a2.reg]+inst.a3.imm, rf[inst.a1.reg], inst.op); break;
 			/*
 
-			case SB: mem[rf[i.a2.reg]+i.a3.imm] = *(uint8_t*)&(rf[i.a1.reg]); break;
-			case SH: *(uint16_t*)&(mem[rf[i.a2.reg]+i.a3.imm]) = *(uint16_t*)&(rf[i.a1.reg]); break;
+			case SB: mem[rf[inst.a2.reg]+inst.a3.imm] = *(uint8_t*)&(rf[inst.a1.reg]); break;
+			case SH: *(uint16_t*)&(mem[rf[inst.a2.reg]+inst.a3.imm]) = *(uint16_t*)&(rf[inst.a1.reg]); break;
 			case SW: 
-				*(uint32_t*)&(mem[rf[i.a2.reg]+i.a3.imm]) = rf[i.a1.reg]; 
-				//printf( "Writing %x to addr %x\n", rf[i.a1.reg], rf[i.a2.reg]+i.a3.imm );
+				*(uint32_t*)&(mem[rf[inst.a2.reg]+inst.a3.imm]) = rf[inst.a1.reg]; 
+				//printf( "Writing %x to addr %x\n", rf[inst.a1.reg], rf[inst.a2.reg]+inst.a3.imm );
 			break;
 			*/
 
-			case BEQ: if ( rf[i.a1.reg] == rf[i.a2.reg] ) pc_next = i.a3.imm; break;
-			case BGE: if ( *(int32_t*)&rf[i.a1.reg] >= *(int32_t*)&rf[i.a2.reg] ) pc_next = i.a3.imm; break;
-			case BGEU: if ( rf[i.a1.reg] >= rf[i.a2.reg] ) pc_next = i.a3.imm; 
+			case BEQ: if ( rf[inst.a1.reg] == rf[inst.a2.reg] ) pc_next = inst.a3.imm; break;
+			case BGE: if ( *(int32_t*)&rf[inst.a1.reg] >= *(int32_t*)&rf[inst.a2.reg] ) pc_next = inst.a3.imm; break;
+			case BGEU: if ( rf[inst.a1.reg] >= rf[inst.a2.reg] ) pc_next = inst.a3.imm; 
 				break;
-			case BLT: if ( *(int32_t*)&rf[i.a1.reg] < *(int32_t*)&rf[i.a2.reg] ) pc_next = i.a3.imm; break;
-			case BLTU: if ( rf[i.a1.reg] < rf[i.a2.reg] ) pc_next = i.a3.imm; break;
-			case BNE: if ( rf[i.a1.reg] != rf[i.a2.reg] ) pc_next = i.a3.imm; break;
+			case BLT: if ( *(int32_t*)&rf[inst.a1.reg] < *(int32_t*)&rf[inst.a2.reg] ) pc_next = inst.a3.imm; break;
+			case BLTU: if ( rf[inst.a1.reg] < rf[inst.a2.reg] ) pc_next = inst.a3.imm; break;
+			case BNE: if ( rf[inst.a1.reg] != rf[inst.a2.reg] ) pc_next = inst.a3.imm; break;
 
 			case JAL:
-				rf[i.a1.reg] = pc + 4;
-				pc_next = i.a2.imm;
+				rf[inst.a1.reg] = pc + 4;
+				pc_next = inst.a2.imm;
 				//printf( "jal %d %x\n", pc+4, pc_next );
 				break;
 			case JALR:
-				rf[i.a1.reg] = pc + 4;
-				pc_next = rf[i.a2.reg] + i.a3.imm;
-				//printf( "jalr %d %d(%d)\n", i.a1.reg, i.a3.imm, i.a2.reg );
+				rf[inst.a1.reg] = pc + 4;
+				pc_next = rf[inst.a2.reg] + inst.a3.imm;
+				//printf( "jalr %d %d(%d)\n", inst.a1.reg, inst.a3.imm, inst.a2.reg );
 				break;
 			case AUIPC:
-				rf[i.a1.reg] = pc + (i.a2.imm<<12);
-				//printf( "auipc %x \n", rf[i.a1.reg] );
+				rf[inst.a1.reg] = pc + (inst.a2.imm<<12);
+				//printf( "auipc %x \n", rf[inst.a1.reg] );
 				break;
 			case LUI:
-				rf[i.a1.reg] = (i.a2.imm<<12);
-				//printf( "lui %x \n", rf[i.a1.reg] );
+				rf[inst.a1.reg] = (inst.a2.imm<<12);
+				//printf( "lui %x \n", rf[inst.a1.reg] );
 				break;
 			
 			case HCF:
 				printf( "\n\n----------\n\n" );
 				printf( "Reached Halt and Catch Fire instruction!\n" );
-				printf( "inst: %6d pc: %6d src line: %d\n", inst_cnt, pc, i.orig_line );
+				printf( "inst: %6d pc: %6d src line: %d\n", inst_cnt, pc, inst.orig_line );
 				print_regfile(rf);
 				dexit = true;
 				break;
 			case UNIMPL:
 			default:
 				printf( "Reached an unimplemented instruction!\n" );
-				if ( i.psrc ) printf( "Instruction: %s\n", i.psrc );
-				printf( "inst: %6d pc: %6d src line: %d\n", inst_cnt, pc, i.orig_line );
+				if ( inst.psrc ) printf( "Instruction: %s\n", inst.psrc );
+				printf( "inst: %6d pc: %6d src line: %d\n", inst_cnt, pc, inst.orig_line );
 				print_regfile(rf);
 				dexit = true;
 				break;
 		}
+
 		pc = pc_next % MEM_BYTES;
 		rf[0] = 0;// cleaner way to do this?
 		if ( stepping ) {
@@ -820,79 +1147,14 @@ void execute(uint8_t* mem, instr* imem, label_loc* labels, int label_count) {
 			}
 		}
 
-		//printf( "reg dst %d -> %x %d\n", i.a1.reg, rf[i.a1.reg], rf[i.a1.reg] );
+		//printf( "reg dst %d -> %x %d\n", inst.a1.reg, rf[inst.a1.reg], rf[inst.a1.reg] );
 
 		fflush(stdout);
 		
 	}
 }
 
-void normalize_labels(instr* imem, label_loc* labels, int label_count, source* src) {
-	for ( int i = 0; i < DATA_OFFSET/4; i++ ) {
-		instr* ii = &imem[i];
-		if ( ii->op == UNIMPL ) continue;
-
-		if ( ii->a1.type == OPTYPE_LABEL ) {
-			ii->a1.type = OPTYPE_IMM;
-			ii->a1.imm = label_addr(ii->a1.label, labels, label_count, ii->orig_line);
-		}
-		if ( ii->a2.type == OPTYPE_LABEL ) {
-			ii->a2.type = OPTYPE_IMM;
-			ii->a2.imm = label_addr(ii->a2.label, labels, label_count, ii->orig_line);
-			switch (ii->op) {
-				case LUI: {
-					ii->a2.imm = (ii->a2.imm>>12); 
-					char areg[4]; sprintf(areg, "x%02d", ii->a1.reg);
-					char immu[12]; sprintf(immu, "0x%08x" , ii->a2.imm);
-					//printf( "LUI %d 0x%x %s\n", ii->a1.reg, ii->a2.imm, immu );
-					append_source("lui", areg, immu, NULL, src, ii);
-					break;
-				}
-				case JAL:
-				int pc = (i*4);
-				int target = ii->a3.imm;
-				int diff = pc - target;
-				if ( diff < 0 ) diff = -diff;
-
-				if ( diff >= (1<<21) ) {
-					printf( "JAL instruction target out of bounds\n" );
-					exit(3);
-				}
-				break;
-			}
-		}
-		if ( ii->a3.type == OPTYPE_LABEL ) {
-			ii->a3.type = OPTYPE_IMM;
-			ii->a3.imm = label_addr(ii->a3.label, labels, label_count, ii->orig_line);
-			switch(ii->op) {
-				case ADDI: {
-					ii->a3.imm = ii->a3.imm&((1<<12)-1);
-					char a1reg[4]; sprintf(a1reg, "x%02d", ii->a1.reg);
-					char a2reg[4]; sprintf(a2reg, "x%02d", ii->a2.reg);
-					char immd[12]; sprintf(immd, "0x%08x" , ii->a3.imm);
-					//printf( "ADDI %d %d 0x%x %s\n", ii->a1.reg, ii->a2.reg, ii->a3.imm, immd );
-					append_source("addi", a1reg, a2reg, immd, src, ii);
-					break;
-				}
-				case BEQ: case BGE: case BGEU: case BLT: case BLTU: case BNE: {
-					int pc = (i*4);
-					int target = ii->a3.imm;
-					int diff = pc - target;
-					if ( diff < 0 ) diff = -diff;
-
-					if ( diff >= (1<<13) ) {
-						printf( "Branch instruction target out of bounds\n" );
-						exit(3);
-					}
-					break;
-				}
-			}
-		}
-	}
-}
-
-int
-main(int argc, char** argv) {
+int main(int argc, char** argv) {
 	if ( argc < 2 ) {
 		printf( "usage: %s asmfile\n", argv[0] );
 		exit(1);
